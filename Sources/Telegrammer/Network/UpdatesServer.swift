@@ -35,6 +35,7 @@ private final class UpdatesHandler: ChannelInboundHandler {
     }
 
     private var buffer: ByteBuffer! = nil
+    private var readBufferView: ByteBufferView?
     private var keepAlive = false
     private var state = State.idle
 
@@ -106,7 +107,13 @@ private final class UpdatesHandler: ChannelInboundHandler {
                 let response = HTTPServerResponsePart.head(responseHead)
                 context.write(self.wrapOutboundOut(response), promise: nil)
             case .body(let bytes):
-                dispatcher.enqueue(bytebuffer: bytes)
+                if readBufferView != nil {
+                    readBufferView?.append(contentsOf: bytes.readableBytesView)
+                    dispatcher.enqueue(bytebuffer: ByteBuffer(readBufferView!))
+                } else {
+                    readBufferView = bytes.readableBytesView
+                    dispatcher.enqueue(bytebuffer: bytes)
+                }
             case .end:
                 self.state.requestComplete()
                 let content = HTTPServerResponsePart.body(.byteBuffer(buffer!.slice()))
